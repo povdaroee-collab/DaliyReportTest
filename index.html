@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="km">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>កម្មវិធីសម្រាប់បុគ្គលិក</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Kantumruy+Pro:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Kantumruy Pro', sans-serif;
+        }
+        /* Custom class for active nav item */
+        .nav-active svg,
+        .nav-active span {
+            color: #3b82f6; /* blue-500 */
+        }
+        /* Hide scrollbar */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        /* Camera view styling */
+        #camera-view {
+            transform: scaleX(-1); /* Mirror view for front camera */
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+    <!-- Login Container -->
+    <div id="login-container" class="max-w-md mx-auto min-h-screen flex flex-col justify-center items-center p-6 bg-white">
+        <div class="w-full">
+            <h1 class="text-2xl font-bold text-center text-blue-600 mb-2">ប្រព័ន្ធបុគ្គលិក</h1>
+            <p class="text-center text-gray-500 mb-8">សូមជ្រើសរើសគណនីរបស់អ្នកដើម្បីបន្ត</p>
+            
+            <div class="mb-4">
+                <label for="employee-select" class="block text-sm font-medium text-gray-700 mb-1">ឈ្មោះ / អត្តលេខ</label>
+                <input list="employee-options" id="employee-select" name="employee-select" class="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500" placeholder="វាយ ឬជ្រើសរើស...">
+                <datalist id="employee-options">
+                    <!-- Options will be populated from Google Sheet -->
+                </datalist>
+            </div>
+
+            <button id="login-button" class="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2" disabled>
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><path d="M12 2a2 2 0 0 0-2 2v2H8a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-2V4a2 2 0 0 0-2-2z"/><path d="M9 12a3 3 0 1 0 6 0 3 3 0 1 0-6 0z"/></svg>
+                <span>ចូលដោយស្កេនមុខ</span>
+            </button>
+            <p id="login-error" class="text-red-500 text-sm text-center mt-2"></p>
+        </div>
+    </div>
+    
+    <!-- Camera Modal -->
+    <div id="camera-modal" class="hidden fixed inset-0 bg-black bg-opacity-80 flex flex-col justify-center items-center z-50 p-4">
+        <video id="camera-view" class="w-full max-w-md h-auto rounded-lg" autoplay playsinline></video>
+        <p id="camera-status" class="text-white mt-4 font-semibold text-lg"></p>
+        <div class="absolute bottom-10 flex gap-4">
+            <button id="scan-button" class="bg-green-500 text-white px-6 py-3 rounded-lg font-bold">ស្កេន</button>
+            <button id="cancel-camera-button" class="bg-gray-600 text-white px-6 py-3 rounded-lg">បោះបង់</button>
+        </div>
+    </div>
+
+
+    <!-- Main App Container -->
+    <div id="app-container" class="max-w-md mx-auto min-h-screen bg-white shadow-lg flex-col hidden">
+        <!-- Header -->
+        <header class="bg-blue-600 text-white p-4 flex items-center justify-between shadow-md sticky top-0 z-10">
+            <div>
+                <h1 class="text-xl font-bold">ប្រព័ន្ធគ្រប់គ្រងបុគ្គលិក</h1>
+                <p id="employeeName" class="text-sm text-blue-200"></p>
+            </div>
+            <div class="w-12 h-12 rounded-full bg-blue-100 overflow-hidden border-2 border-white">
+                <img id="employeeAvatar" src="https://placehold.co/100x100/E2E8F0/4A5568?text=User" alt="Employee Avatar" class="w-full h-full object-cover">
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main id="main-content" class="flex-grow p-4 overflow-y-auto no-scrollbar pb-24">
+            <!-- Dashboard Page -->
+            <div id="dashboard-page"></div>
+            <!-- Attendance Page -->
+            <div id="attendance-page" class="hidden"></div>
+            <!-- Payslip Page -->
+            <div id="payslip-page" class="hidden"></div>
+            <!-- Profile Page -->
+            <div id="profile-page" class="hidden"></div>
+        </main>
+
+        <!-- Bottom Navigation -->
+        <nav class="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white border-t border-gray-200 flex justify-around">
+        </nav>
+    </div>
+    
+    <script>
+        // Making the file complete by filling in the hidden content
+        document.getElementById('dashboard-page').innerHTML = `<h2 class="text-lg font-semibold text-gray-700 mb-4">ទំព័រដើម</h2><div class="grid grid-cols-2 gap-4"><div class="bg-green-100 text-green-800 p-4 rounded-lg shadow"><p class="text-3xl font-bold" id="days-present">0</p><p class="text-sm">ថ្ងៃមានវត្តមាន</p></div><div class="bg-red-100 text-red-800 p-4 rounded-lg shadow"><p class="text-3xl font-bold" id="days-absent">0</p><p class="text-sm">ថ្ងៃអវត្តមាន</p></div><div class="bg-purple-100 text-purple-800 p-4 rounded-lg shadow"><p class="text-3xl font-bold" id="days-onduty">0</p><p class="text-sm">សម្រាកការងារក្រៅ</p></div><div class="bg-blue-100 text-blue-800 p-4 rounded-lg shadow"><p class="text-3xl font-bold" id="days-leave">0</p><p class="text-sm">ថ្ងៃសុំច្បាប់</p></div></div><div class="mt-6"><button onclick="navigateTo('attendance-page')" class="w-full bg-white border border-gray-300 text-gray-700 p-4 rounded-lg shadow-sm flex items-center justify-between mb-3"><span>ពិនិត្យមើលវត្តមានលម្អិត</span><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button><button onclick="navigateTo('payslip-page')" class="w-full bg-white border border-gray-300 text-gray-700 p-4 rounded-lg shadow-sm flex items-center justify-between"><span>មើលវិក័យបត្រប្រាក់ខែ</span><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button></div>`;
+        document.getElementById('attendance-page').innerHTML = `<div class="flex justify-between items-center mb-4"><h2 class="text-lg font-semibold text-gray-700">ប្រតិទិនវត្តមាន</h2><div class="flex items-center space-x-2"><button id="prev-month" class="p-2 rounded-full hover:bg-gray-100"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></button><span id="month-year" class="font-semibold w-28 text-center"></span><button id="next-month" class="p-2 rounded-full hover:bg-gray-100"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button></div></div><div id="calendar-grid" class="grid grid-cols-7 gap-1 text-center"></div><div class="mt-4 space-y-2 text-sm"><div class="flex items-center"><span class="w-4 h-4 bg-green-500 rounded-full mr-2"></span> មានវត្តមាន</div><div class="flex items-center"><span class="w-4 h-4 bg-red-500 rounded-full mr-2"></span> អវត្តមាន</div><div class="flex items-center"><span class="w-4 h-4 bg-blue-500 rounded-full mr-2"></span> សុំច្បាប់</div><div class="flex items-center"><span class="w-4 h-4 bg-purple-500 rounded-full mr-2"></span> សម្រាកជាប់ការងារក្រៅ</div></div>`;
+        document.getElementById('payslip-page').innerHTML = `<div class="flex justify-between items-center mb-4"><h2 class="text-lg font-semibold text-gray-700">វិក័យបត្រប្រាក់ខែ</h2><select id="payslip-month-select" class="border border-gray-300 rounded-md p-2"></select></div><div id="payslip-details" class="bg-gray-50 p-4 rounded-lg border"></div>`;
+        document.getElementById('profile-page').innerHTML = `<h2 class="text-lg font-semibold text-gray-700 mb-4">ព័ត៌មាន​របស់ខ្ញុំ</h2><div class="bg-white p-4 rounded-lg shadow border"><div class="flex flex-col items-center"><div class="w-24 h-24 rounded-full bg-blue-100 overflow-hidden border-4 border-white shadow-md mb-4"><img id="profile-avatar-large" src="https://placehold.co/100x100/E2E8F0/4A5568?text=User" alt="Employee Avatar" class="w-full h-full object-cover"></div><h3 class="text-xl font-bold" id="profile-name"></h3><p class="text-gray-500" id="profile-id"></p><p class="text-gray-600 mt-1" id="profile-position"></p></div><div class="mt-6 border-t pt-4"><div class="flex justify-between py-2"><span class="text-gray-600">ឆ្នាំសិក្សា:</span><span class="font-medium" id="profile-academic-year"></span></div><div class="flex justify-between py-2"><span class="text-gray-600">Email:</span><span class="font-medium" id="profile-email"></span></div><div class="flex justify-between py-2"><span class="text-gray-600">លេខទូរស័្ទ:</span><span class="font-medium" id="profile-phone"></span></div><div class="flex justify-between py-2"><span class="text-gray-600">ថ្ងៃចូលបម្រើការ:</span><span class="font-medium" id="profile-join-date"></span></div></div><button id="logout-button" class="w-full mt-6 bg-red-500 text-white py-2 rounded-lg hover:bg-red-600 transition-colors">ចាកចេញ</button></div>`;
+        document.querySelector('nav').innerHTML = `<button data-page="dashboard-page" class="nav-item flex-1 flex flex-col items-center justify-center p-3 text-gray-500 hover:bg-gray-50 nav-active"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><span class="text-xs mt-1">ទំព័រដើម</span></button><button data-page="attendance-page" class="nav-item flex-1 flex flex-col items-center justify-center p-3 text-gray-500 hover:bg-gray-50"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg><span class="text-xs mt-1">វត្តមាន</span></button><button data-page="payslip-page" class="nav-item flex-1 flex flex-col items-center justify-center p-3 text-gray-500 hover:bg-gray-50"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg><span class="text-xs mt-1">ប្រាក់ខែ</span></button><button data-page="profile-page" class="nav-item flex-1 flex flex-col items-center justify-center p-3 text-gray-500 hover:bg-gray-50"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span class="text-xs mt-1">គណនី</span></button>`;
+    </script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async function() {
+            // --- Global State & Config ---
+            const EMPLOYEE_SHEET_ID = '1eRyPoifzyvB4oBmruNyXcoKMKPRqjk6xDD6-bPNW6pc';
+            const EMPLOYEE_SHEET_NAME = 'DIList';
+            const EMPLOYEE_SHEET_URL = `https://docs.google.com/spreadsheets/d/${EMPLOYEE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${EMPLOYEE_SHEET_NAME}`;
+            
+            const ATTENDANCE_SHEET_ID = '14eA00GXamqLkhuLAzVYPOBKads7XUZ5mfVRyqSGQwfk';
+            const ATTENDANCE_SHEET_NAME = 'Data';
+            const ATTENDANCE_SHEET_URL = `https://docs.google.com/spreadsheets/d/${ATTENDANCE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${ATTENDANCE_SHEET_NAME}`;
+
+            const khmerMonths = ["មករា", "កុម្ភៈ", "មីនា", "មេសា", "ឧសភា", "មិថុនា", "កក្កដា", "សីហា", "កញ្ញា", "តុលា", "វិច្ឆិកា", "ធ្នូ"];
+
+            let allEmployees = [], loggedInEmployeeData = null, referenceDescriptor = null;
+            let currentMonth = new Date().getMonth(), currentYear = new Date().getFullYear();
+            let cameraStream = null;
+            const attendanceData = {}, payslipData = [];
+
+            // --- UI ELEMENTS ---
+            const loginContainer = document.getElementById('login-container');
+            const appContainer = document.getElementById('app-container');
+            const cameraModal = document.getElementById('camera-modal');
+            const videoElement = document.getElementById('camera-view');
+            const employeeSelect = document.getElementById('employee-select');
+            const datalistOptions = document.getElementById('employee-options');
+            const loginButton = document.getElementById('login-button');
+            const scanButton = document.getElementById('scan-button');
+            const cancelCameraButton = document.getElementById('cancel-camera-button');
+            const cameraStatus = document.getElementById('camera-status');
+            const loginError = document.getElementById('login-error');
+
+            // --- FACE API FUNCTIONS ---
+            async function loadFaceApiModels() {
+                const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
+                try {
+                    await Promise.all([
+                        faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+                        faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+                        faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+                    ]);
+                    console.log("Face-api models loaded");
+                    return true;
+                } catch (error) {
+                    console.error("Failed to load face-api models:", error);
+                    loginError.textContent = "មិនអាចទាញយកម៉ូដែលសម្គាល់ផ្ទៃមុខបានទេ។";
+                    return false;
+                }
+            }
+
+            async function createReferenceDescriptor(imageUrl) {
+                if (!imageUrl || !imageUrl.startsWith('http')) return null;
+                try {
+                    const img = await faceapi.fetchImage(imageUrl);
+                    const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
+                    return detection ? detection.descriptor : null;
+                } catch (e) {
+                    console.error("Error creating reference descriptor:", e);
+                    return null;
+                }
+            }
+
+            // --- INITIALIZATION ---
+            async function mainInit() {
+                const savedEmployeeId = localStorage.getItem('loggedInEmployeeId');
+
+                loginButton.disabled = true;
+                loginButton.querySelector('span').textContent = 'កំពុងដំណើរការ...';
+                
+                const modelsLoaded = await loadFaceApiModels();
+                if (!modelsLoaded) {
+                    loginButton.querySelector('span').textContent = 'មានបញ្ហា';
+                    return;
+                }
+                await initializeLogin(); // Populates allEmployees
+
+                if (savedEmployeeId && allEmployees.length > 0) {
+                    const savedEmployee = allEmployees.find(emp => emp.id === savedEmployeeId);
+                    if (savedEmployee) {
+                        loggedInEmployeeData = savedEmployee;
+                        loginContainer.classList.add('hidden');
+                        appContainer.style.display = 'flex';
+                        await initializeApp();
+                        return; 
+                    } else {
+                        localStorage.removeItem('loggedInEmployeeId');
+                    }
+                }
+
+                loginButton.disabled = true;
+                loginButton.querySelector('span').textContent = 'ចូលដោយស្កេនមុខ';
+            }
+
+            async function initializeLogin() {
+                try {
+                    const response = await fetch(EMPLOYEE_SHEET_URL);
+                    const csvText = await response.text();
+                    allEmployees = parseEmployeeCSV(csvText);
+                    populateEmployeeDatalist(allEmployees);
+                } catch (error) {
+                    console.error("Failed to fetch employee data:", error);
+                    loginError.textContent = "មិនអាចទាញទិន្នន័យបុគ្គលិកបានទេ។";
+                }
+            }
+            
+            function parseEmployeeCSV(csv) {
+                return csv.split('\n').slice(1).map(row => { // <--- កែពី .slice(8) ទៅ .slice(1)
+                    const columns = row.split('","').map(c => c.replace(/"/g, ''));
+                    if (columns.length > 26) {
+                        return {
+                            id: columns[4].trim(),
+                            name: columns[11].trim(),
+                            joinDate: columns[25].trim(),
+                            avatar: columns[26].trim(),
+                            academicYear: columns[3].trim(),
+                            position: 'បុគ្គលិក', email: 'N/A', phone: 'N/A'
+                        };
+                    }
+                    return null;
+                }).filter(emp => emp && emp.id && emp.name);
+            }
+
+            function populateEmployeeDatalist(employees) {
+                datalistOptions.innerHTML = '';
+                employees.forEach(emp => {
+                    datalistOptions.innerHTML += `<option value="${emp.name} (${emp.id})"></option>`;
+                });
+            }
+
+            // --- EVENT LISTENERS ---
+            employeeSelect.addEventListener('input', () => {
+                loginButton.disabled = !allEmployees.some(emp => `${emp.name} (${emp.id})` === employeeSelect.value);
+                loginError.textContent = '';
+            });
+
+            loginButton.addEventListener('click', async () => {
+                const originalButtonText = loginButton.querySelector('span').textContent;
+                loginButton.disabled = true;
+                loginButton.querySelector('span').textContent = 'កំពុងរៀបចំ...';
+                loginError.textContent = '';
+
+                loggedInEmployeeData = allEmployees.find(emp => `${emp.name} (${emp.id})` === employeeSelect.value);
+                if (!loggedInEmployeeData) {
+                    loginError.textContent = 'សូមជ្រើសរើសបុគ្គលិកដែលមានក្នុងបញ្ជី។';
+                    loginButton.disabled = false;
+                    loginButton.querySelector('span').textContent = originalButtonText;
+                    return;
+                }
+
+                referenceDescriptor = await createReferenceDescriptor(loggedInEmployeeData.avatar);
+                if (referenceDescriptor) {
+                    await startCamera();
+                } else {
+                    loginError.textContent = 'រូបថតយោងមិនត្រឹមត្រូវ ឬមិនអាចចូលដំណើរការបានទេ។';
+                }
+                
+                loginButton.disabled = false;
+                loginButton.querySelector('span').textContent = originalButtonText;
+            });
+            
+            cancelCameraButton.addEventListener('click', stopCamera);
+            
+            scanButton.addEventListener('click', async () => {
+                cameraStatus.textContent = 'កំពុងស្វែងរកផ្ទៃមុខ...';
+                scanButton.disabled = true;
+                cancelCameraButton.disabled = true;
+
+                try {
+                    const detection = await faceapi.detectSingleFace(videoElement, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
+                    if (detection) {
+                        cameraStatus.textContent = 'រកឃើញផ្ទៃមុខ, កំពុងប្រៀបធៀប...';
+                        const distance = faceapi.euclideanDistance(referenceDescriptor, detection.descriptor);
+                        if (distance < 0.55) { // Stricter threshold for better accuracy
+                            cameraStatus.textContent = 'ការផ្ទៀងផ្ទាត់បានជោគជ័យ!';
+                            localStorage.setItem('loggedInEmployeeId', loggedInEmployeeData.id);
+                            setTimeout(async () => {
+                                stopCamera();
+                                loginContainer.classList.add('hidden');
+                                appContainer.style.display = 'flex';
+                                await initializeApp();
+                            }, 1500);
+                        } else {
+                            cameraStatus.textContent = 'ផ្ទៃមុខមិនត្រូវគ្នាទេ។ សូមព្យាយាមម្តងទៀត។';
+                            scanButton.disabled = false;
+                            cancelCameraButton.disabled = false;
+                        }
+                    } else {
+                        cameraStatus.textContent = 'រកមិនឃើញផ្ទៃមុខទេ។ សូមតម្រង់កាមេរ៉ាឡើងវិញ។';
+                        scanButton.disabled = false;
+                        cancelCameraButton.disabled = false;
+                    }
+                } catch (e) {
+                    cameraStatus.textContent = 'មានបញ្ហាក្នុងពេលស្កេន។';
+                    scanButton.disabled = false;
+                    cancelCameraButton.disabled = false;
+                }
+            });
+
+            function handleLogout() {
+                localStorage.removeItem('loggedInEmployeeId');
+                appContainer.style.display = 'none';
+                loginContainer.classList.remove('hidden');
+                employeeSelect.value = '';
+                loginButton.disabled = true;
+                stopCamera();
+            }
+
+            // --- CAMERA LOGIC ---
+            async function startCamera() {
+                try {
+                    cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+                    videoElement.srcObject = cameraStream;
+                    cameraModal.classList.remove('hidden');
+                    cameraStatus.textContent = 'សូមដាក់មុខឲ្យចំកាមេរ៉ា';
+                    scanButton.disabled = false;
+                    cancelCameraButton.disabled = false;
+                } catch (err) {
+                    loginError.textContent = 'មិនអាចបើកកាមេរ៉ាបានទេ។';
+                }
+            }
+
+            function stopCamera() {
+                if (cameraStream) cameraStream.getTracks().forEach(track => track.stop());
+                cameraModal.classList.add('hidden');
+            }
+            
+            // --- NEW DATA HANDLING LOGIC ---
+             function determineStatus(text) {
+                if (!text || text.trim() === '') return 'NoData'; 
+
+                const lowerText = text.toLowerCase();
+
+                if (lowerText.includes('(មានច្បាប់)') || lowerText.includes('(ច្បាប់di)')) {
+                    return 'Leave';
+                }
+                if (lowerText.includes('(គ្មានច្បាប់)') || lowerText.includes('(ឥតច្បាប់)')) {
+                    return 'Absent';
+                }
+                if (/\d:/.test(lowerText)) {
+                    return 'Present';
+                }
+                if (lowerText.length > 0) {
+                    return 'OnDuty';
+                }
+                return 'NoData';
+            }
+
+            function parseDateFromSheet(dateStr) {
+                if (!dateStr || dateStr.split('-').length !== 3) return null;
+                const monthMap = { 'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5, 'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11 };
+                const parts = dateStr.split('-');
+                const day = parseInt(parts[0], 10);
+                const monthStr = parts[1].charAt(0).toUpperCase() + parts[1].slice(1).toLowerCase();
+                const month = monthMap[monthStr];
+                const year = parseInt(parts[2], 10);
+                if (isNaN(day) || month === undefined || isNaN(year)) return null;
+                // Use Date.UTC to avoid timezone-related date shifts.
+                return new Date(Date.UTC(year, month, day));
+            }
+
+            async function fetchAndProcessAttendanceData() {
+                Object.keys(attendanceData).forEach(key => delete attendanceData[key]);
+                if (!loggedInEmployeeData || !loggedInEmployeeData.id) return;
+                
+                try {
+                    const response = await fetch(ATTENDANCE_SHEET_URL);
+                    const csvText = await response.text();
+                    const rows = csvText.split('\n').slice(1);
+
+                    rows.forEach(row => {
+                        const columns = row.split('","').map(c => c.replace(/"/g, ''));
+                        if (columns.length < 11) return;
+
+                        const employeeIdInSheet = columns[6].trim();
+                        
+                        if (employeeIdInSheet === loggedInEmployeeData.id) {
+                            const schedule = columns[8].trim();
+                            if (schedule === 'ពេលយប់') {
+                                return; // Skip night shift records
+                            }
+
+                            const dateStr = columns[7].trim();      
+                            const checkIn = columns[9].trim();     
+                            const checkOut = columns[10].trim();     
+                            
+                            const date = parseDateFromSheet(dateStr);
+                            if (!date) return;
+
+                            const formattedDate = date.toISOString().split('T')[0];
+                            
+                            const morningStatus = determineStatus(checkIn);
+                            const afternoonStatus = determineStatus(checkOut);
+
+                            const dailyCounts = { Present: 0, Absent: 0, Leave: 0, OnDuty: 0 };
+                            if (morningStatus !== 'NoData') dailyCounts[morningStatus] += 0.5;
+                            if (afternoonStatus !== 'NoData') dailyCounts[afternoonStatus] += 0.5;
+
+                            // If both are NoData, it's a full day absence
+                            if (morningStatus === 'NoData' && afternoonStatus === 'NoData') {
+                                dailyCounts.Absent = 1;
+                            } else {
+                                // If one is NoData, count it as a half-day absence
+                                if (morningStatus === 'NoData') dailyCounts.Absent += 0.5;
+                                if (afternoonStatus === 'NoData') dailyCounts.Absent += 0.5;
+                            }
+
+
+                            let dominantStatus = 'Present';
+                            if (dailyCounts.Absent > 0) dominantStatus = 'Absent';
+                            else if (dailyCounts.Leave > 0) dominantStatus = 'Leave';
+                            else if (dailyCounts.OnDuty > 0) dominantStatus = 'OnDuty';
+                            
+                            attendanceData[formattedDate] = {
+                                dominant: dominantStatus,
+                                present: dailyCounts.Present,
+                                absent: dailyCounts.Absent,
+                                leave: dailyCounts.Leave,
+                                onduty: dailyCounts.OnDuty
+                            };
+                        }
+                    });
+                } catch (error) {
+                    console.error("Failed to fetch or process attendance data:", error);
+                }
+            }
+
+            function generatePayslipData() {
+                payslipData.length = 0;
+                
+                let base_salary = 0;
+                let base_allowance = 0;
+                const academicYear = loggedInEmployeeData.academicYear;
+
+                switch (academicYear) {
+                    case 'ឆ្នាំទី១': base_salary = 300000; base_allowance = 100000; break;
+                    case 'ឆ្នាំទី២': base_salary = 400000; base_allowance = 100000; break;
+                    case 'ឆ្នាំទី៣': base_salary = 600000; base_allowance = 200000; break;
+                    case 'ឆ្នាំទី៤': base_salary = 1000000; base_allowance = 200000; break;
+                    default: base_salary = 250000; base_allowance = 50000;
+                }
+
+                const availableMonths = new Set();
+                Object.keys(attendanceData).forEach(dateStr => {
+                    const d = new Date(dateStr);
+                    availableMonths.add(`${d.getUTCFullYear()}-${d.getUTCMonth()}`);
+                });
+
+                Array.from(availableMonths).sort((a, b) => new Date(b.split('-')[0], b.split('-')[1]) - new Date(a.split('-')[0], a.split('-')[1]))
+                .forEach(monthString => {
+                    const [year, month] = monthString.split('-').map(Number);
+
+                    const monthlyTotals = Object.keys(attendanceData).reduce((acc, dateStr) => {
+                        const d = new Date(dateStr);
+                        if (d.getUTCMonth() === month && d.getUTCFullYear() === year) {
+                            acc.absent += attendanceData[dateStr].absent;
+                            acc.leave += attendanceData[dateStr].leave;
+                        }
+                        return acc;
+                    }, { absent: 0, leave: 0 });
+
+                    const hasAbsenceOrLeaveThisMonth = (monthlyTotals.absent + monthlyTotals.leave) > 0;
+                    const final_allowance = hasAbsenceOrLeaveThisMonth ? 0 : base_allowance;
+                    
+                    const absencesAndLeavesThisMonth = monthlyTotals.absent + monthlyTotals.leave;
+                    
+                    let final_deductions = 0;
+                    const isEligibleForDeduction = ['ឆ្នាំទី២', 'ឆ្នាំទី៣', 'ឆ្នាំទី៤'].includes(academicYear);
+
+                    if (isEligibleForDeduction && absencesAndLeavesThisMonth >= 3) {
+                        final_deductions += 100000;
+                    }
+
+                    payslipData.push({ month, year, basic_salary: base_salary, allowance: final_allowance, deductions: final_deductions });
+                });
+            }
+
+            // --- APP LOGIC (Main entry point after login) ---
+            async function initializeApp() {
+                await fetchAndProcessAttendanceData();
+                generatePayslipData();
+                loadEmployeeInfo();
+                setupNavListeners();
+                updateDashboardSummary(currentMonth, currentYear); // Pass current month/year
+                renderCalendar(currentMonth, currentYear);
+                setupCalendarControls();
+                populatePayslipSelect();
+                setupPayslipSelectListener();
+                document.getElementById('logout-button').addEventListener('click', handleLogout);
+                navigateTo('dashboard-page');
+            }
+
+            function loadEmployeeInfo() {
+                 if(!loggedInEmployeeData) return;
+                 const avatarSrc = loggedInEmployeeData.avatar || `https://placehold.co/100x100/93C5FD/1E40AF?text=${loggedInEmployeeData.name.charAt(0)}`;
+                 ['employeeAvatar', 'profile-avatar-large'].forEach(id => document.getElementById(id).src = avatarSrc);
+                 ['employeeName', 'profile-name'].forEach(id => document.getElementById(id).textContent = loggedInEmployeeData.name);
+                 document.getElementById('profile-id').textContent = `ID: ${loggedInEmployeeData.id}`;
+                 document.getElementById('profile-position').textContent = loggedInEmployeeData.position;
+                 document.getElementById('profile-email').textContent = loggedInEmployeeData.email;
+                 document.getElementById('profile-phone').textContent = loggedInEmployeeData.phone;
+                 document.getElementById('profile-join-date').textContent = loggedInEmployeeData.joinDate;
+                 document.getElementById('profile-academic-year').textContent = loggedInEmployeeData.academicYear;
+            }
+
+            function setupNavListeners() {
+                document.querySelectorAll('.nav-item').forEach(item => item.addEventListener('click', () => navigateTo(item.dataset.page)));
+            }
+
+            function updateDashboardSummary(month, year) {
+                 const summary = Object.keys(attendanceData).reduce((acc, dateStr) => {
+                    const d = new Date(dateStr);
+                    // Filter by the specified month and year
+                    if (d.getUTCMonth() === month && d.getUTCFullYear() === year) {
+                        const current = attendanceData[dateStr];
+                        acc.present += current.present;
+                        acc.absent += current.absent;
+                        acc.leave += current.leave;
+                        acc.onduty += current.onduty;
+                    }
+                    return acc;
+                 }, { present: 0, absent: 0, leave: 0, onduty: 0 });
+
+                 document.getElementById('days-present').textContent = summary.present;
+                 document.getElementById('days-absent').textContent = summary.absent;
+                 document.getElementById('days-onduty').textContent = summary.onduty;
+                 document.getElementById('days-leave').textContent = summary.leave;
+            }
+
+            function renderCalendar(month, year) {
+                const g = document.getElementById('calendar-grid');
+                g.innerHTML = '';
+                document.getElementById('month-year').textContent = `${khmerMonths[month]} ${year}`;
+                ['អា', 'ច', 'អ', 'ព', 'ព្រ', 'សុ', 'ស'].forEach(d => g.innerHTML += `<div class="font-semibold text-sm text-gray-600">${d}</div>`);
+                let f = new Date(year, month, 1).getDay();
+                for (let i=0; i<f; i++) g.appendChild(document.createElement('div'));
+                for (let d=1; d<=new Date(year, month + 1, 0).getDate(); d++) {
+                    // Use Date.UTC to create a consistent key for lookup.
+                    const dt = new Date(Date.UTC(year, month, d));
+                    const dailyInfo = attendanceData[dt.toISOString().split('T')[0]];
+                    let c = 'bg-gray-100 text-gray-400';
+                    const colorMap = {Present:'bg-green-500', Absent:'bg-red-500', Leave:'bg-blue-500', OnDuty: 'bg-purple-500'};
+                    if (dailyInfo && colorMap[dailyInfo.dominant]) {
+                        c = colorMap[dailyInfo.dominant] + ' text-white';
+                    }
+                    g.innerHTML += `<div class="w-10 h-10 flex items-center justify-center rounded-full mx-auto ${c}">${d}</div>`;
+                }
+            }
+
+            function setupCalendarControls() {
+                document.getElementById('prev-month').addEventListener('click', () => { 
+                    currentMonth--; 
+                    if (currentMonth < 0) { currentMonth = 11; currentYear--; } 
+                    renderCalendar(currentMonth, currentYear); 
+                    updateDashboardSummary(currentMonth, currentYear); // Update dashboard on month change
+                });
+                document.getElementById('next-month').addEventListener('click', () => { 
+                    currentMonth++; 
+                    if (currentMonth > 11) { currentMonth = 0; currentYear++; } 
+                    renderCalendar(currentMonth, currentYear); 
+                    updateDashboardSummary(currentMonth, currentYear); // Update dashboard on month change
+                });
+            }
+
+            function toKhmerCurrency(num) {
+                return `${num.toLocaleString('en-US')} ៛`;
+            }
+            
+            function populatePayslipSelect() {
+                const s = document.getElementById('payslip-month-select');
+                s.innerHTML = '';
+                if (payslipData.length === 0) {
+                    s.innerHTML = `<option>គ្មានទិន្នន័យ</option>`;
+                    document.getElementById('payslip-details').innerHTML = `<p class="text-center text-gray-500">គ្មានទិន្នន័យវិក័យបត្រសម្រាប់បង្ហាញទេ។</p>`;
+
+                } else {
+                    payslipData.forEach(p => s.innerHTML += `<option value="${p.year}-${p.month}">ខែ ${khmerMonths[p.month]} ${p.year}</option>`);
+                    renderPayslip(s.value);
+                }
+            }
+
+            function renderPayslip(value) {
+                const [y, m] = value.split('-').map(Number);
+                const d = payslipData.find(s => s.year === y && s.month === m);
+                const c = document.getElementById('payslip-details');
+                if (!d) { c.innerHTML = `<p>គ្មានទិន្នន័យ</p>`; return; }
+                const t = d.basic_salary + d.allowance;
+                const n = t - d.deductions;
+                c.innerHTML = `<div class="mb-4 text-center"><p class="font-bold text-lg">វិក័យបត្រសម្រាប់ខែ ${khmerMonths[m]} ${y}</p><p class="text-sm text-gray-500">ID: ${loggedInEmployeeData.id}</p></div><div class="border-t border-b py-2 space-y-2"><h4 class="font-semibold text-green-700">ចំណូល</h4><div class="flex justify-between"><span>ប្រាក់ខែគោល:</span> <span>${toKhmerCurrency(d.basic_salary)}</span></div><div class="flex justify-between"><span>ប្រាក់លើកទឹកចិត្ត:</span> <span>${toKhmerCurrency(d.allowance)}</span></div><div class="flex justify-between font-bold border-t pt-1 mt-1"><span>សរុប:</span> <span>${toKhmerCurrency(t)}</span></div></div><div class="border-b py-2 space-y-2"><h4 class="font-semibold text-red-700">ការកាត់កង</h4><div class="flex justify-between"><span>អវត្តមានម៉ោងការងារ:</span> <span>${toKhmerCurrency(d.deductions)}</span></div></div><div class="mt-4 text-center bg-blue-100 p-3 rounded-lg"><p class="text-sm text-blue-800">ប្រាក់ខែចុងក្រោយ</p><p class="text-2xl font-bold text-blue-900">${toKhmerCurrency(n)}</p></div>`;
+            }
+
+            function setupPayslipSelectListener() {
+                document.getElementById('payslip-month-select').addEventListener('change', (e) => renderPayslip(e.target.value));
+            }
+            
+            window.navigateTo = function(pageId) {
+                document.querySelectorAll('#main-content > div').forEach(p => p.classList.add('hidden'));
+                document.getElementById(pageId).classList.remove('hidden');
+                document.querySelectorAll('.nav-item').forEach(i => i.classList.toggle('nav-active', i.dataset.page === pageId));
+                
+                // Update dashboard summary if navigating to dashboard
+                if (pageId === 'dashboard-page') {
+                    updateDashboardSummary(currentMonth, currentYear);
+                }
+            }
+
+            mainInit();
+        });
+    </script>
+</body>
+</html>
+
